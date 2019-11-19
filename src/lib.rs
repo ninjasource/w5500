@@ -358,6 +358,23 @@ impl<'a> W5500<'a> {
         Ok(())
     }
 
+    pub fn connect<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, host_ip: &IpAddress, host_port: u16 ) -> Result<(), E> {
+        self.write_to(
+            spi,
+            socket.at(SocketRegister::DestinationIp),
+            &[host_ip.address[0], host_ip.address[1], host_ip.address[2], host_ip.address[3]]
+        )?;
+
+        self.write_u16(
+            spi,
+            socket.at(SocketRegister::DestinationPort), host_port
+        )?;
+
+        self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Connect as u8)?;
+
+        Ok(())
+    }
+
     pub fn open_tcp<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket) -> Result<(), E> {
   //      self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::TCP as u8);
         self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Open as u8);
@@ -589,9 +606,9 @@ impl<'a> W5500<'a> {
 
     fn write<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, byte: u8) -> Result<(), E> {
         block!(spi.send(byte))?;
-        block!(spi.read())?;
-        Ok(())
-    }
+    block!(spi.read())?;
+    Ok(())
+}
 
     fn chip_select(&mut self) {
         self.cs.set_low()
