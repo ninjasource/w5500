@@ -5,12 +5,13 @@
 extern crate byteorder;
 extern crate embedded_hal as hal;
 
-use hal::digital::OutputPin;
+//use hal::digital::OutputPin;
+use hal::digital::v2::OutputPin;
 use hal::spi::FullDuplex;
 
 use byteorder::ByteOrder;
 use byteorder::BigEndian;
-use core::fmt::Error;
+//use core::fmt::Error;
 
 #[macro_use(block)]
 extern crate nb;
@@ -22,6 +23,17 @@ const VARIABLE_DATA_LENGTH      : u8 = 0b_00;
 const FIXED_DATA_LENGTH_1_BYTE  : u8 = 0b_01;
 const FIXED_DATA_LENGTH_2_BYTES : u8 = 0b_10;
 const FIXED_DATA_LENGTH_4_BYTES : u8 = 0b_11;
+
+
+#[derive(Debug)]
+pub enum Error<SpiError, PinError> {
+    /// SPI communication error
+    Spi(SpiError),
+    /// CS output pin error
+    Pin(PinError),
+    /// Some other error
+    Other,
+}
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Default, Debug)]
 pub struct IpAddress {
@@ -74,25 +86,19 @@ impl ::core::fmt::Display for MacAddress {
     }
 }
 
-
-pub struct W5500<'a>  {
-    cs:  &'a mut OutputPin,
+pub struct W5500<'a, CS>  {
+    cs:  &'a mut CS,
 }
 
-impl<'a> W5500<'a> {
-    pub fn new(cs: &'a mut OutputPin) -> W5500<'a> {
-        W5500 {
+impl<'a, CS, PinError> W5500<'a, CS>
+    where
+    CS: OutputPin<Error = PinError>
+{
+    pub fn new(cs: &'a mut CS) ->
+        Self { W5500 {
             cs,
-        }
-    }
+        }}
 
-    /*
-    pub fn new<E, S: FullDuplex<u8, Error=E>>(spi: &mut S, cs: &'a mut OutputPin) -> W5500<'a> {
-        W5500 {
-            cs,
-        }
-    }
-*/
     pub fn init<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>) -> Result<(), E> {
         self.reset(spi)?;
         self.set_mode(spi, false, false, false, false)?;
@@ -611,11 +617,11 @@ impl<'a> W5500<'a> {
 }
 
     fn chip_select(&mut self) {
-        self.cs.set_low()
+        self.cs.set_low();
     }
 
     fn chip_deselect(&mut self) {
-        self.cs.set_high()
+        self.cs.set_high();
     }
 
 }
