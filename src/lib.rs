@@ -9,21 +9,20 @@ extern crate embedded_hal as hal;
 use hal::digital::v2::OutputPin;
 use hal::spi::FullDuplex;
 
-use byteorder::ByteOrder;
 use byteorder::BigEndian;
+use byteorder::ByteOrder;
 //use core::fmt::Error;
 
 #[macro_use(block)]
 extern crate nb;
 
-const COMMAND_READ  : u8 = 0x00 << 2;
-const COMMAND_WRITE : u8 = 0x01 << 2;
+const COMMAND_READ: u8 = 0x00 << 2;
+const COMMAND_WRITE: u8 = 0x01 << 2;
 
-const VARIABLE_DATA_LENGTH      : u8 = 0b_00;
-const FIXED_DATA_LENGTH_1_BYTE  : u8 = 0b_01;
-const FIXED_DATA_LENGTH_2_BYTES : u8 = 0b_10;
-const FIXED_DATA_LENGTH_4_BYTES : u8 = 0b_11;
-
+const VARIABLE_DATA_LENGTH: u8 = 0b_00;
+const FIXED_DATA_LENGTH_1_BYTE: u8 = 0b_01;
+const FIXED_DATA_LENGTH_2_BYTES: u8 = 0b_10;
+const FIXED_DATA_LENGTH_4_BYTES: u8 = 0b_11;
 
 #[derive(Debug)]
 pub enum Error<SpiError, PinError> {
@@ -37,86 +36,91 @@ pub enum Error<SpiError, PinError> {
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Default, Debug)]
 pub struct IpAddress {
-    pub address: [u8; 4]
+    pub address: [u8; 4],
 }
 
 impl IpAddress {
     pub fn new(a0: u8, a1: u8, a2: u8, a3: u8) -> IpAddress {
         IpAddress {
-            address: [a0, a1, a2, a3]
+            address: [a0, a1, a2, a3],
         }
     }
 }
 
 impl ::core::fmt::Display for IpAddress {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-        write!(f, "{}.{}.{}.{}",
-               self.address[0],
-               self.address[1],
-               self.address[2],
-               self.address[3],
+        write!(
+            f,
+            "{}.{}.{}.{}",
+            self.address[0], self.address[1], self.address[2], self.address[3],
         )
     }
 }
 
-
 #[derive(Copy, Clone, PartialOrd, PartialEq, Default, Debug)]
 pub struct MacAddress {
-    pub address: [u8; 6]
+    pub address: [u8; 6],
 }
 
 impl MacAddress {
     pub fn new(a0: u8, a1: u8, a2: u8, a3: u8, a4: u8, a5: u8) -> MacAddress {
         MacAddress {
-            address: [a0, a1, a2, a3, a4, a5]
+            address: [a0, a1, a2, a3, a4, a5],
         }
     }
 }
 
 impl ::core::fmt::Display for MacAddress {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-        write!(f, "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-               self.address[0],
-               self.address[1],
-               self.address[2],
-               self.address[3],
-               self.address[4],
-               self.address[5],
+        write!(
+            f,
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            self.address[0],
+            self.address[1],
+            self.address[2],
+            self.address[3],
+            self.address[4],
+            self.address[5],
         )
     }
 }
 
-pub struct W5500<'a, CS>  {
-    cs:  &'a mut CS,
+pub struct W5500<'a, CS> {
+    cs: &'a mut CS,
 }
 
 impl<'a, CS, PinError> W5500<'a, CS>
-    where
-    CS: OutputPin<Error = PinError>
+where
+    CS: OutputPin<Error = PinError>,
 {
-    pub fn new(cs: &'a mut CS) ->
-        Self { W5500 {
-            cs,
-        }}
+    pub fn new(cs: &'a mut CS) -> Self {
+        W5500 { cs }
+    }
 
-    pub fn init<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>) -> Result<(), E> {
+    pub fn init<E>(&mut self, spi: &mut dyn FullDuplex<u8, Error = E>) -> Result<(), E> {
         self.reset(spi)?;
         self.set_mode(spi, false, false, false, false)?;
         Ok(())
     }
 
-    pub fn reset<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>) -> Result<(), E> {
+    pub fn reset<E>(&mut self, spi: &mut dyn FullDuplex<u8, Error = E>) -> Result<(), E> {
         self.write_to(
             spi,
             Register::CommonRegister(0x00_00_u16),
             &[
                 0b1000_0000, // Mode Register (force reset)
-            ]
+            ],
         )
     }
 
-    pub fn set_mode<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, wol: bool, ping_block: bool, ppoe: bool, force_arp: bool) -> Result<(), E> {
-
+    pub fn set_mode<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        wol: bool,
+        ping_block: bool,
+        ppoe: bool,
+        force_arp: bool,
+    ) -> Result<(), E> {
         let mut mode = 0x00;
 
         if wol {
@@ -135,14 +139,14 @@ impl<'a, CS, PinError> W5500<'a, CS>
             mode |= (1 << 1);
         }
 
-        self.write_to(
-            spi,
-            Register::CommonRegister(0x00_00_u16),
-            &[mode]
-        )
+        self.write_to(spi, Register::CommonRegister(0x00_00_u16), &[mode])
     }
 
-    pub fn set_interrupt_mask<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, sockets: &[Socket]) -> Result<(), E> {
+    pub fn set_interrupt_mask<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        sockets: &[Socket],
+    ) -> Result<(), E> {
         let mut mask = 0u8;
         for socket in sockets.iter() {
             mask |= match *socket {
@@ -156,95 +160,113 @@ impl<'a, CS, PinError> W5500<'a, CS>
                 Socket::Socket7 => 1 << 7,
             };
         }
-        self.write_to(
-            spi,
-            Register::CommonRegister(0x00_17_u16),
-            &[mask]
-        )
+        self.write_to(spi, Register::CommonRegister(0x00_17_u16), &[mask])
     }
 
-    pub fn set_socket_interrupt_mask<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, interrupts: &[Interrupt]) -> Result<(), E> {
+    pub fn set_socket_interrupt_mask<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        interrupts: &[Interrupt],
+    ) -> Result<(), E> {
         let mut mask = 0u8;
         for interrupt in interrupts.iter() {
             mask |= *interrupt as u8;
         }
-        self.write_to(
-            spi,
-            socket.at(SocketRegister::InterruptMask),
-            &[mask]
-        )
+        self.write_to(spi, socket.at(SocketRegister::InterruptMask), &[mask])
     }
 
-    pub fn set_gateway<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, gateway: &IpAddress) -> Result<(), E> {
-        self.write_to(
-            spi,
-            Register::CommonRegister(0x00_01_u16),
-            &gateway.address
-        )
+    pub fn set_gateway<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        gateway: &IpAddress,
+    ) -> Result<(), E> {
+        self.write_to(spi, Register::CommonRegister(0x00_01_u16), &gateway.address)
     }
 
-    pub fn set_subnet<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, subnet: &IpAddress) -> Result<(), E> {
-        self.write_to(
-            spi,
-            Register::CommonRegister(0x00_05_u16),
-            &subnet.address
-        )
+    pub fn set_subnet<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        subnet: &IpAddress,
+    ) -> Result<(), E> {
+        self.write_to(spi, Register::CommonRegister(0x00_05_u16), &subnet.address)
     }
 
-    pub fn set_mac<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, mac: &MacAddress) -> Result<(), E> {
-        self.write_to(
-            spi,
-            Register::CommonRegister(0x00_09_u16),
-            &mac.address
-        )
+    pub fn set_mac<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        mac: &MacAddress,
+    ) -> Result<(), E> {
+        self.write_to(spi, Register::CommonRegister(0x00_09_u16), &mac.address)
     }
 
-    pub fn get_mac<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>) -> Result<MacAddress, E> {
+    pub fn get_mac<E>(&mut self, spi: &mut dyn FullDuplex<u8, Error = E>) -> Result<MacAddress, E> {
         let mut mac = MacAddress::default();
-        self.read_from(
-            spi,
-            Register::CommonRegister(0x00_09_u16),
-            &mut mac.address
-        )?;
+        self.read_from(spi, Register::CommonRegister(0x00_09_u16), &mut mac.address)?;
         Ok(mac)
     }
 
-    pub fn set_ip<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, ip: &IpAddress) -> Result<(), E> {
-        self.write_to(
-            spi,
-            Register::CommonRegister(0x00_0F_u16),
-            &ip.address
-        )
+    pub fn set_ip<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        ip: &IpAddress,
+    ) -> Result<(), E> {
+        self.write_to(spi, Register::CommonRegister(0x00_0F_u16), &ip.address)
     }
 
-    pub fn is_interrupt_set<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, interrupt: Interrupt) -> Result<bool, E> {
+    pub fn is_interrupt_set<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        interrupt: Interrupt,
+    ) -> Result<bool, E> {
         let mut state = [0u8; 1];
-        self.read_from(
-            spi,
-            socket.at(SocketRegister::Interrupt),
-            &mut state
-        )?;
+        self.read_from(spi, socket.at(SocketRegister::Interrupt), &mut state)?;
         Ok(state[0] & interrupt as u8 != 0)
     }
 
-    pub fn reset_interrupt<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, interrupt: Interrupt) -> Result<(), E> {
+    pub fn reset_interrupt<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        interrupt: Interrupt,
+    ) -> Result<(), E> {
         self.write_to(
             spi,
             socket.at(SocketRegister::Interrupt),
-            &[interrupt as u8]
+            &[interrupt as u8],
         )
     }
 
-    pub fn close<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket) -> Result<(), E> {
-        self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Close as u8)
+    pub fn close<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+    ) -> Result<(), E> {
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Close as u8,
+        )
     }
 
-    pub fn dissconnect<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket) -> Result<(), E> {
-        self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Disconnect as u8)
+    pub fn dissconnect<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+    ) -> Result<(), E> {
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Disconnect as u8,
+        )
     }
 
-    pub fn get_socket_status<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket)
-                                -> Result<Option<SocketStatus>, E> {
+    pub fn get_socket_status<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+    ) -> Result<Option<SocketStatus>, E> {
         let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
 
         Ok(match status {
@@ -261,13 +283,16 @@ impl<'a, CS, PinError> W5500<'a, CS>
             status if status == SocketStatus::Closing as u8 => Some(SocketStatus::Closing),
             status if status == SocketStatus::TimeWait as u8 => Some(SocketStatus::TimeWait),
             status if status == SocketStatus::LastAck as u8 => Some(SocketStatus::LastAck),
-            _ => None
+            _ => None,
         })
     }
 
     // See pages 46 and 49
-    pub fn read_registers<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket)
-                             -> Result<(u8,u8,u8, u8, u16, u8), E> {
+    pub fn read_registers<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+    ) -> Result<(u8, u8, u8, u8, u16, u8), E> {
         let mode = self.read_u8(spi, socket.at(SocketRegister::Mode))?;
         let command = self.read_u8(spi, socket.at(SocketRegister::Command))?;
         let interrupt = self.read_u8(spi, socket.at(SocketRegister::Interrupt))?;
@@ -285,7 +310,15 @@ impl<'a, CS, PinError> W5500<'a, CS>
         Ok(true)*/
     }
 
-    pub fn send_udp<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, local_port: u16, host: &IpAddress, host_port: u16, data: &[u8]) -> Result<(), E> {
+    pub fn send_udp<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        local_port: u16,
+        host: &IpAddress,
+        host_port: u16,
+        data: &[u8],
+    ) -> Result<(), E> {
         // TODO not always socket 0
         // TODO check if in use
 
@@ -293,9 +326,9 @@ impl<'a, CS, PinError> W5500<'a, CS>
             spi,
             socket.at(SocketRegister::Mode),
             &[
-                Protocol::UDP as u8, // Socket Mode Register
-                SocketCommand::Open as u8 // Socket Command Regsiter
-            ]
+                Protocol::UDP as u8,       // Socket Mode Register
+                SocketCommand::Open as u8, // Socket Command Regsiter
+            ],
         );
 
         {
@@ -306,14 +339,23 @@ impl<'a, CS, PinError> W5500<'a, CS>
                 spi,
                 socket.at(SocketRegister::LocalPort),
                 &[
-                    local_port[0], local_port[1], // local port u16
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // destination mac
-                    host.address[0], host.address[1], host.address[2], host.address[3], // target IP
-                    host_port[0], host_port[1], // destination port (5354)
-                ]
+                    local_port[0],
+                    local_port[1], // local port u16
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00, // destination mac
+                    host.address[0],
+                    host.address[1],
+                    host.address[2],
+                    host.address[3], // target IP
+                    host_port[0],
+                    host_port[1], // destination port (5354)
+                ],
             )?;
         }
-
 
         let data_length = data.len() as u16;
         {
@@ -322,31 +364,37 @@ impl<'a, CS, PinError> W5500<'a, CS>
             self.write_to(
                 spi,
                 socket.at(SocketRegister::TxReadPointer),
-                &[
-                    0x00, 0x00,
-                    data_length[0], data_length[1],
-                ]
+                &[0x00, 0x00, data_length[0], data_length[1]],
             );
         }
 
         self.write_to(
             spi,
             socket.tx_register_at(0x00_00),
-            &data[..data_length as usize]
+            &data[..data_length as usize],
         );
 
-        self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Send as u8)
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Send as u8,
+        )
     }
 
-    pub fn listen_udp<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, port: u16) -> Result<(), E> {
-        self.write_u16(
-            spi,
-            socket.at(SocketRegister::LocalPort),
-            port
-        )?;
+    pub fn listen_udp<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        port: u16,
+    ) -> Result<(), E> {
+        self.write_u16(spi, socket.at(SocketRegister::LocalPort), port)?;
 
         self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::UDP as u8);
-        self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Open as u8)
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Open as u8,
+        )
 
         /*
         self.write_to(
@@ -359,54 +407,87 @@ impl<'a, CS, PinError> W5500<'a, CS>
         )*/
     }
 
-    pub fn set_protocol<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, protocol: Protocol) -> Result<(), E> {
+    pub fn set_protocol<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        protocol: Protocol,
+    ) -> Result<(), E> {
         self.write_u8(spi, socket.at(SocketRegister::Mode), protocol as u8);
         Ok(())
     }
 
-    pub fn connect<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, host_ip: &IpAddress, host_port: u16 ) -> Result<(), E> {
+    pub fn connect<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        host_ip: &IpAddress,
+        host_port: u16,
+    ) -> Result<(), E> {
         self.write_to(
             spi,
             socket.at(SocketRegister::DestinationIp),
-            &[host_ip.address[0], host_ip.address[1], host_ip.address[2], host_ip.address[3]]
+            &[
+                host_ip.address[0],
+                host_ip.address[1],
+                host_ip.address[2],
+                host_ip.address[3],
+            ],
         )?;
 
-        self.write_u16(
+        self.write_u16(spi, socket.at(SocketRegister::DestinationPort), host_port)?;
+
+        self.write_u8(
             spi,
-            socket.at(SocketRegister::DestinationPort), host_port
+            socket.at(SocketRegister::Command),
+            SocketCommand::Connect as u8,
         )?;
-
-        self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Connect as u8)?;
 
         Ok(())
     }
 
-    pub fn open_tcp<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket) -> Result<(), E> {
-  //      self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::TCP as u8);
-        self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Open as u8);
+    pub fn open_tcp<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+    ) -> Result<(), E> {
+        //      self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::TCP as u8);
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Open as u8,
+        );
 
         loop {
             let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
             if status == SocketStatus::Init as u8 {
-                return Ok(())
+                return Ok(());
             }
         }
     }
 
-    pub fn send_tcp<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, data: &[u8]) -> Result<usize, E> {
+    pub fn send_tcp<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        data: &[u8],
+    ) -> Result<usize, E> {
         let mut data_length = data.len() as u16;
 
         if data_length == 0 {
             return Ok(0);
         }
 
-        let max_length = self.read_u16(spi,socket.at(SocketRegister::TransmitBuffer))?;
+        let max_length = self.read_u16(spi, socket.at(SocketRegister::TransmitBuffer))?;
 
-        data_length = if data_length < max_length { data_length } else { max_length};
+        data_length = if data_length < max_length {
+            data_length
+        } else {
+            max_length
+        };
         loop {
             let tx_free_size = self.read_u16_atomic(spi, socket.at(SocketRegister::TxFreeSize))?;
-            if data_length < tx_free_size
-            {
+            if data_length < tx_free_size {
                 break;
             }
         }
@@ -416,12 +497,20 @@ impl<'a, CS, PinError> W5500<'a, CS>
         self.write_to(
             spi,
             socket.tx_register_at(ptr),
-            &data[..data_length as usize]
+            &data[..data_length as usize],
         );
 
         // update the write pointer
-        self.write_u16(spi, socket.at(SocketRegister::TxWritePointer), ptr + data_length);
-        self.write_u8 (spi, socket.at(SocketRegister::Command), SocketCommand::Send as u8)?;
+        self.write_u16(
+            spi,
+            socket.at(SocketRegister::TxWritePointer),
+            ptr + data_length,
+        );
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Send as u8,
+        )?;
 
         // wait for bytes to be sent and clear the interrupt
         loop {
@@ -435,25 +524,34 @@ impl<'a, CS, PinError> W5500<'a, CS>
         Ok(data_length as usize)
     }
 
-    pub fn listen_tcp<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket,
-                         port: u16) -> Result<(), E> {
-        self.write_u16(
-            spi,
-            socket.at(SocketRegister::LocalPort),
-            port
-        )?;
+    pub fn listen_tcp<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        port: u16,
+    ) -> Result<(), E> {
+        self.write_u16(spi, socket.at(SocketRegister::LocalPort), port)?;
 
-        self.write_u8(spi, socket.at(SocketRegister::Command), SocketCommand::Listen as u8)?;
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Listen as u8,
+        )?;
 
         loop {
             let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
             if status == SocketStatus::Listen as u8 {
-                return Ok(())
+                return Ok(());
             }
         }
     }
 
-    pub fn try_receive_tcp<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, destination: &mut [u8]) -> Result<Option<(usize)>, E> {
+    pub fn try_receive_tcp<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        destination: &mut [u8],
+    ) -> Result<Option<(usize)>, E> {
         if self.read_u8(spi, socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
             return Ok(None);
         }
@@ -467,27 +565,44 @@ impl<'a, CS, PinError> W5500<'a, CS>
         };
 
         let buffer_len = destination.len();
-        if receive_size == 0 || buffer_len == 0{
+        if receive_size == 0 || buffer_len == 0 {
             return Ok(None);
         }
 
-        let size = if receive_size > buffer_len { buffer_len } else { receive_size };
+        let size = if receive_size > buffer_len {
+            buffer_len
+        } else {
+            receive_size
+        };
 
         let read_pointer = self.read_u16(spi, socket.at(SocketRegister::RxReadPointer))?;
         self.read_from(
             spi,
             socket.rx_register_at(read_pointer),
-            &mut destination[..size]
+            &mut destination[..size],
         )?;
 
         // reset
-        self.write_u16(spi, socket.at(SocketRegister::RxReadPointer), read_pointer + size as u16)?;
-        self.write_u8 (spi, socket.at(SocketRegister::Command), SocketCommand::Recv as u8)?;
+        self.write_u16(
+            spi,
+            socket.at(SocketRegister::RxReadPointer),
+            read_pointer + size as u16,
+        )?;
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Recv as u8,
+        )?;
         Ok(Some(size))
     }
 
     /// TODO destination buffer has to be as large as the receive buffer or complete read is not guaranteed
-    pub fn try_receive_udp<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, socket: Socket, destination: &mut [u8]) -> Result<Option<(IpAddress, u16, usize)>, E> {
+    pub fn try_receive_udp<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        destination: &mut [u8],
+    ) -> Result<Option<(IpAddress, u16, usize)>, E> {
         if self.read_u8(spi, socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
             return Ok(None);
         }
@@ -506,43 +621,63 @@ impl<'a, CS, PinError> W5500<'a, CS>
             // |   --- 4 Bytes ---     |  --- 2 Bytes --- |  --- 2 Bytes ---  |      ....       |
 
             let ip = self.read_ip(spi, socket.rx_register_at(read_pointer))?;
-            let port = self.read_u16(spi, socket.rx_register_at(read_pointer+4))?;
-            let data_length = destination.len().min(self.read_u16(spi, socket.rx_register_at(read_pointer+6))? as usize);
+            let port = self.read_u16(spi, socket.rx_register_at(read_pointer + 4))?;
+            let data_length = destination
+                .len()
+                .min(self.read_u16(spi, socket.rx_register_at(read_pointer + 6))? as usize);
 
             self.read_from(
                 spi,
-                socket.rx_register_at(read_pointer+8),
-                &mut destination[..data_length]
+                socket.rx_register_at(read_pointer + 8),
+                &mut destination[..data_length],
             )?;
 
             // self.read_from(socket.register_at(0x00_0C), &mut ip.address)?;
             // self.read_u16(socket.register_at(0x00_10))?;
 
             // reset
-            self.write_u16(spi, socket.at(SocketRegister::RxReadPointer), read_pointer + receive_size as u16)?;
-            self.write_u8 (spi, socket.at(SocketRegister::Command), SocketCommand::Recv as u8)?;
+            self.write_u16(
+                spi,
+                socket.at(SocketRegister::RxReadPointer),
+                read_pointer + receive_size as u16,
+            )?;
+            self.write_u8(
+                spi,
+                socket.at(SocketRegister::Command),
+                SocketCommand::Recv as u8,
+            )?;
 
             Ok(Some((ip, port, data_length)))
-
         } else {
             Ok(None)
         }
     }
 
-    pub fn read_u8<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, register: Register) -> Result<u8, E> {
+    pub fn read_u8<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        register: Register,
+    ) -> Result<u8, E> {
         let mut buffer = [0u8; 1];
         self.read_from(spi, register, &mut buffer)?;
         Ok(buffer[0])
     }
 
-
-    pub fn read_u16<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, register: Register) -> Result<u16, E> {
+    pub fn read_u16<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        register: Register,
+    ) -> Result<u16, E> {
         let mut buffer = [0u8; 2];
         self.read_from(spi, register, &mut buffer)?;
         Ok(BigEndian::read_u16(&buffer))
     }
 
-    fn read_u16_atomic<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, register: Register) -> Result<u16, E> {
+    fn read_u16_atomic<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        register: Register,
+    ) -> Result<u16, E> {
         loop {
             let s0 = self.read_u16(spi, register)?;
             let s1 = self.read_u16(spi, register)?;
@@ -552,15 +687,28 @@ impl<'a, CS, PinError> W5500<'a, CS>
         }
     }
 
-    pub fn read_ip<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, register: Register) -> Result<IpAddress, E> {
+    pub fn read_ip<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        register: Register,
+    ) -> Result<IpAddress, E> {
         let mut ip = IpAddress::default();
         self.read_from(spi, register, &mut ip.address)?;
         Ok(ip)
     }
 
-    pub fn read_from<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, register: Register, target: &mut [u8]) -> Result<(), E> {
+    pub fn read_from<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        register: Register,
+        target: &mut [u8],
+    ) -> Result<(), E> {
         self.chip_select();
-        let mut request = [0_u8, 0_u8, register.control_byte() | COMMAND_READ | VARIABLE_DATA_LENGTH];
+        let mut request = [
+            0_u8,
+            0_u8,
+            register.control_byte() | COMMAND_READ | VARIABLE_DATA_LENGTH,
+        ];
         BigEndian::write_u16(&mut request[..2], register.address());
         let result = self
             .write_bytes(spi, &request)
@@ -569,19 +717,38 @@ impl<'a, CS, PinError> W5500<'a, CS>
         result
     }
 
-    pub fn write_u8<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, register: Register, value: u8) -> Result<(), E> {
+    pub fn write_u8<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        register: Register,
+        value: u8,
+    ) -> Result<(), E> {
         self.write_to(spi, register, &[value])
     }
 
-    pub fn write_u16<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, register: Register, value: u16) -> Result<(), E> {
+    pub fn write_u16<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        register: Register,
+        value: u16,
+    ) -> Result<(), E> {
         let mut data = [0u8; 2];
         BigEndian::write_u16(&mut data, value);
         self.write_to(spi, register, &data)
     }
 
-    pub fn write_to<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, register: Register, data: &[u8]) -> Result<(), E> {
+    pub fn write_to<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        register: Register,
+        data: &[u8],
+    ) -> Result<(), E> {
         self.chip_select();
-        let mut request = [0_u8, 0_u8, register.control_byte() | COMMAND_WRITE | VARIABLE_DATA_LENGTH];
+        let mut request = [
+            0_u8,
+            0_u8,
+            register.control_byte() | COMMAND_WRITE | VARIABLE_DATA_LENGTH,
+        ];
         BigEndian::write_u16(&mut request[..2], register.address());
         let result = self
             .write_bytes(spi, &request)
@@ -590,31 +757,39 @@ impl<'a, CS, PinError> W5500<'a, CS>
         result
     }
 
-    fn read_bytes<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, bytes: &mut [u8]) -> Result<(), E> {
+    fn read_bytes<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        bytes: &mut [u8],
+    ) -> Result<(), E> {
         for i in 0..bytes.len() {
             bytes[i] = self.read(spi)?;
         }
         Ok(())
     }
 
-    fn read<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>) -> Result<u8, E> {
+    fn read<E>(&mut self, spi: &mut dyn FullDuplex<u8, Error = E>) -> Result<u8, E> {
         block!(spi.send(0x00))?;
         let result = block!(spi.read());
         result
     }
 
-    fn write_bytes<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, bytes: &[u8]) -> Result<(), E> {
+    fn write_bytes<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        bytes: &[u8],
+    ) -> Result<(), E> {
         for b in bytes {
             self.write(spi, *b)?;
         }
         Ok(())
     }
 
-    fn write<E>(&mut self, spi: &mut FullDuplex<u8, Error=E>, byte: u8) -> Result<(), E> {
+    fn write<E>(&mut self, spi: &mut dyn FullDuplex<u8, Error = E>, byte: u8) -> Result<(), E> {
         block!(spi.send(byte))?;
-    block!(spi.read())?;
-    Ok(())
-}
+        block!(spi.read())?;
+        Ok(())
+    }
 
     fn chip_select(&mut self) {
         self.cs.set_low();
@@ -623,7 +798,6 @@ impl<'a, CS, PinError> W5500<'a, CS>
     fn chip_deselect(&mut self) {
         self.cs.set_high();
     }
-
 }
 
 fn u16_to_be_bytes(u16: u16) -> [u8; 2] {
@@ -654,42 +828,41 @@ pub enum SocketStatus {
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum SocketRegister {
-    Mode            = 0x0000,
-    Command         = 0x0001,
-    Interrupt       = 0x0002,
-    Status          = 0x0003,
-    LocalPort       = 0x0004,
-    DestinationMac  = 0x0006,
-    DestinationIp   = 0x000C,
+    Mode = 0x0000,
+    Command = 0x0001,
+    Interrupt = 0x0002,
+    Status = 0x0003,
+    LocalPort = 0x0004,
+    DestinationMac = 0x0006,
+    DestinationIp = 0x000C,
     DestinationPort = 0x0010,
-    MaxSegmentSize  = 0x0012,
+    MaxSegmentSize = 0x0012,
     // Reserved 0x0014
-    TypeOfService   = 0x0015,
-    TimeToLive      = 0x0016,
+    TypeOfService = 0x0015,
+    TimeToLive = 0x0016,
     // Reserved 0x0017 - 0x001D
-    ReceiveBuffer   = 0x001E,
-    TransmitBuffer  = 0x001F,
-    TxFreeSize      = 0x0020,
-    TxReadPointer   = 0x0022,
-    TxWritePointer  = 0x0024,
-    RxReceivedSize  = 0x0026,
-    RxReadPointer   = 0x0028,
-    RxWritePointer  = 0x002A,
-    InterruptMask   = 0x002C,
-    FragmentOffset  = 0x002D,
-    KeepAliveTimer  = 0x002F,
+    ReceiveBuffer = 0x001E,
+    TransmitBuffer = 0x001F,
+    TxFreeSize = 0x0020,
+    TxReadPointer = 0x0022,
+    TxWritePointer = 0x0024,
+    RxReceivedSize = 0x0026,
+    RxReadPointer = 0x0028,
+    RxWritePointer = 0x002A,
+    InterruptMask = 0x002C,
+    FragmentOffset = 0x002D,
+    KeepAliveTimer = 0x002F,
     // Reserved 0x0030 - 0xFFFF
 }
-
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Interrupt {
-    SendOk       = 1 << 4,
-    Timeout      = 1 << 3,
-    Received     = 1 << 2,
+    SendOk = 1 << 4,
+    Timeout = 1 << 3,
+    Received = 1 << 2,
     Disconnected = 1 << 1,
-    Connected    = 1 << 0,
+    Connected = 1 << 0,
 }
 
 #[repr(u8)]
@@ -824,7 +997,7 @@ pub enum Register {
 impl Register {
     fn control_byte(&self) -> u8 {
         match *self {
-            Register::CommonRegister(_)  => 0b00000_000,
+            Register::CommonRegister(_) => 0b00000_000,
 
             Register::Socket0Register(_) => 0b00001_000,
             Register::Socket0TxBuffer(_) => 0b00010_000,
