@@ -89,15 +89,15 @@ impl ::core::fmt::Display for MacAddress {
     }
 }
 
-pub struct W5500<'a, CS> {
-    cs: &'a mut CS,
+pub struct W5500<CS> {
+    cs: CS,
 }
 
-impl<'a, CS, PinError> W5500<'a, CS>
+impl<CS, PinError> W5500<CS>
 where
     CS: OutputPin<Error = PinError>,
 {
-    pub fn new(cs: &'a mut CS) -> Self {
+    pub fn new(cs: CS) -> Self {
         W5500 { cs }
     }
 
