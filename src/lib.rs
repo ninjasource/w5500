@@ -89,27 +89,28 @@ impl ::core::fmt::Display for MacAddress {
     }
 }
 
-pub struct W5500<CS> {
-    cs: CS,
+pub struct W5500<'a, CS, SPI> {
+    cs: &'a mut CS,
+    spi: &'a mut SPI,
 }
 
-impl<CS, PinError> W5500<CS>
+impl<'a, CS, PinError, SPI, SpiError> W5500<'a, CS, SPI>
 where
     CS: OutputPin<Error = PinError>,
+    SPI: Transfer<u8, Error = SpiError>,
 {
-    pub fn new(cs: CS) -> Self {
-        W5500 { cs }
+    pub fn new(cs: &'a mut CS, spi: &'a mut SPI) -> Self {
+        W5500 { cs, spi }
     }
 
-    pub fn init<E>(&mut self, spi: &mut Spi<E>) -> Result<(), E> {
-        self.reset(spi)?;
-        self.set_mode(spi, false, false, false, false)?;
+    pub fn init(&mut self) -> Result<(), SpiError> {
+        self.reset()?;
+        self.set_mode(false, false, false, false)?;
         Ok(())
     }
 
-    pub fn reset<E>(&mut self, spi: &mut Spi<E>) -> Result<(), E> {
+    pub fn reset(&mut self) -> Result<(), SpiError> {
         self.write_to(
-            spi,
             Register::CommonRegister(0x00_00_u16),
             &[
                 0b1000_0000, // Mode Register (force reset)
@@ -117,14 +118,13 @@ where
         )
     }
 
-    pub fn set_mode<E>(
+    pub fn set_mode(
         &mut self,
-        spi: &mut Spi<E>,
         wol: bool,
         ping_block: bool,
         ppoe: bool,
         force_arp: bool,
-    ) -> Result<(), E> {
+    ) -> Result<(), SpiError> {
         let mut mode = 0x00;
 
         if wol {
@@ -143,10 +143,10 @@ where
             mode |= (1 << 1);
         }
 
-        self.write_to(spi, Register::CommonRegister(0x00_00_u16), &[mode])
+        self.write_to(Register::CommonRegister(0x00_00_u16), &[mode])
     }
 
-    pub fn set_interrupt_mask<E>(&mut self, spi: &mut Spi<E>, sockets: &[Socket]) -> Result<(), E> {
+    pub fn set_interrupt_mask(&mut self, sockets: &[Socket]) -> Result<(), SpiError> {
         let mut mask = 0u8;
         for socket in sockets.iter() {
             mask |= match *socket {
@@ -160,90 +160,77 @@ where
                 Socket::Socket7 => 1 << 7,
             };
         }
-        self.write_to(spi, Register::CommonRegister(0x00_17_u16), &[mask])
+        self.write_to(Register::CommonRegister(0x00_17_u16), &[mask])
     }
 
-    pub fn set_socket_interrupt_mask<E>(
+    pub fn set_socket_interrupt_mask(
         &mut self,
-        spi: &mut Spi<E>,
         socket: Socket,
         interrupts: &[Interrupt],
-    ) -> Result<(), E> {
+    ) -> Result<(), SpiError> {
         let mut mask = 0u8;
         for interrupt in interrupts.iter() {
             mask |= *interrupt as u8;
         }
-        self.write_to(spi, socket.at(SocketRegister::InterruptMask), &[mask])
+        self.write_to(socket.at(SocketRegister::InterruptMask), &[mask])
     }
 
-    pub fn set_gateway<E>(&mut self, spi: &mut Spi<E>, gateway: &IpAddress) -> Result<(), E> {
-        self.write_to(spi, Register::CommonRegister(0x00_01_u16), &gateway.address)
+    pub fn set_gateway(&mut self, gateway: &IpAddress) -> Result<(), SpiError> {
+        self.write_to(Register::CommonRegister(0x00_01_u16), &gateway.address)
     }
 
-    pub fn set_subnet<E>(&mut self, spi: &mut Spi<E>, subnet: &IpAddress) -> Result<(), E> {
-        self.write_to(spi, Register::CommonRegister(0x00_05_u16), &subnet.address)
+    pub fn set_subnet(&mut self, subnet: &IpAddress) -> Result<(), SpiError> {
+        self.write_to(Register::CommonRegister(0x00_05_u16), &subnet.address)
     }
 
-    pub fn set_mac<E>(&mut self, spi: &mut Spi<E>, mac: &MacAddress) -> Result<(), E> {
-        self.write_to(spi, Register::CommonRegister(0x00_09_u16), &mac.address)
+    pub fn set_mac(&mut self, mac: &MacAddress) -> Result<(), SpiError> {
+        self.write_to(Register::CommonRegister(0x00_09_u16), &mac.address)
     }
 
-    pub fn get_mac<E>(&mut self, spi: &mut Spi<E>) -> Result<MacAddress, E> {
+    pub fn get_mac(&mut self) -> Result<MacAddress, SpiError> {
         let mut mac = MacAddress::default();
-        self.read_from(spi, Register::CommonRegister(0x00_09_u16), &mut mac.address)?;
+        self.read_from(Register::CommonRegister(0x00_09_u16), &mut mac.address)?;
         Ok(mac)
     }
 
-    pub fn set_ip<E>(&mut self, spi: &mut Spi<E>, ip: &IpAddress) -> Result<(), E> {
-        self.write_to(spi, Register::CommonRegister(0x00_0F_u16), &ip.address)
+    pub fn set_ip(&mut self, ip: &IpAddress) -> Result<(), SpiError> {
+        self.write_to(Register::CommonRegister(0x00_0F_u16), &ip.address)
     }
 
-    pub fn is_interrupt_set<E>(
+    pub fn is_interrupt_set(
         &mut self,
-        spi: &mut Spi<E>,
         socket: Socket,
         interrupt: Interrupt,
-    ) -> Result<bool, E> {
+    ) -> Result<bool, SpiError> {
         let mut state = [0u8; 1];
-        self.read_from(spi, socket.at(SocketRegister::Interrupt), &mut state)?;
+        self.read_from(socket.at(SocketRegister::Interrupt), &mut state)?;
         Ok(state[0] & interrupt as u8 != 0)
     }
 
-    pub fn reset_interrupt<E>(
+    pub fn reset_interrupt(
         &mut self,
-        spi: &mut Spi<E>,
         socket: Socket,
         interrupt: Interrupt,
-    ) -> Result<(), E> {
-        self.write_to(
-            spi,
-            socket.at(SocketRegister::Interrupt),
-            &[interrupt as u8],
-        )
+    ) -> Result<(), SpiError> {
+        self.write_to(socket.at(SocketRegister::Interrupt), &[interrupt as u8])
     }
 
-    pub fn close<E>(&mut self, spi: &mut Spi<E>, socket: Socket) -> Result<(), E> {
+    pub fn close(&mut self, socket: Socket) -> Result<(), SpiError> {
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Close as u8,
         )
     }
 
-    pub fn dissconnect<E>(&mut self, spi: &mut Spi<E>, socket: Socket) -> Result<(), E> {
+    pub fn dissconnect(&mut self, socket: Socket) -> Result<(), SpiError> {
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Disconnect as u8,
         )
     }
 
-    pub fn get_socket_status<E>(
-        &mut self,
-        spi: &mut Spi<E>,
-        socket: Socket,
-    ) -> Result<Option<SocketStatus>, E> {
-        let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
+    pub fn get_socket_status(&mut self, socket: Socket) -> Result<Option<SocketStatus>, SpiError> {
+        let status = self.read_u8(socket.at(SocketRegister::Status))?;
 
         Ok(match status {
             status if status == SocketStatus::Closed as u8 => Some(SocketStatus::Closed),
@@ -264,17 +251,16 @@ where
     }
 
     // See pages 46 and 49
-    pub fn read_registers<E>(
+    pub fn read_registers(
         &mut self,
-        spi: &mut Spi<E>,
         socket: Socket,
-    ) -> Result<(u8, u8, u8, u8, u16, u8), E> {
-        let mode = self.read_u8(spi, socket.at(SocketRegister::Mode))?;
-        let command = self.read_u8(spi, socket.at(SocketRegister::Command))?;
-        let interrupt = self.read_u8(spi, socket.at(SocketRegister::Interrupt))?;
-        let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
-        let port = self.read_u16(spi, socket.at(SocketRegister::LocalPort))?;
-        let interrupt_mask = self.read_u8(spi, socket.at(SocketRegister::InterruptMask))?;
+    ) -> Result<(u8, u8, u8, u8, u16, u8), SpiError> {
+        let mode = self.read_u8(socket.at(SocketRegister::Mode))?;
+        let command = self.read_u8(socket.at(SocketRegister::Command))?;
+        let interrupt = self.read_u8(socket.at(SocketRegister::Interrupt))?;
+        let status = self.read_u8(socket.at(SocketRegister::Status))?;
+        let port = self.read_u16(socket.at(SocketRegister::LocalPort))?;
+        let interrupt_mask = self.read_u8(socket.at(SocketRegister::InterruptMask))?;
 
         Ok((mode, command, status, interrupt, port, interrupt_mask))
 
@@ -286,20 +272,18 @@ where
         Ok(true)*/
     }
 
-    pub fn send_udp<E>(
+    pub fn send_udp(
         &mut self,
-        spi: &mut Spi<E>,
         socket: Socket,
         local_port: u16,
         host: &IpAddress,
         host_port: u16,
         data: &[u8],
-    ) -> Result<(), E> {
+    ) -> Result<(), SpiError> {
         // TODO not always socket 0
         // TODO check if in use
 
         self.write_to(
-            spi,
             socket.at(SocketRegister::Mode),
             &[
                 Protocol::UDP as u8,       // Socket Mode Register
@@ -312,7 +296,6 @@ where
             let host_port = u16_to_be_bytes(host_port);
 
             self.write_to(
-                spi,
                 socket.at(SocketRegister::LocalPort),
                 &[
                     local_port[0],
@@ -338,31 +321,27 @@ where
             let data_length = u16_to_be_bytes(data_length);
 
             self.write_to(
-                spi,
                 socket.at(SocketRegister::TxReadPointer),
                 &[0x00, 0x00, data_length[0], data_length[1]],
             );
         }
 
         self.write_to(
-            spi,
             socket.tx_register_at(0x00_00),
             &data[..data_length as usize],
         );
 
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Send as u8,
         )
     }
 
-    pub fn listen_udp<E>(&mut self, spi: &mut Spi<E>, socket: Socket, port: u16) -> Result<(), E> {
-        self.write_u16(spi, socket.at(SocketRegister::LocalPort), port)?;
+    pub fn listen_udp(&mut self, socket: Socket, port: u16) -> Result<(), SpiError> {
+        self.write_u16(socket.at(SocketRegister::LocalPort), port)?;
 
-        self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::UDP as u8);
+        self.write_u8(socket.at(SocketRegister::Mode), Protocol::UDP as u8);
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Open as u8,
         )
@@ -378,25 +357,18 @@ where
         )*/
     }
 
-    pub fn set_protocol<E>(
-        &mut self,
-        spi: &mut Spi<E>,
-        socket: Socket,
-        protocol: Protocol,
-    ) -> Result<(), E> {
-        self.write_u8(spi, socket.at(SocketRegister::Mode), protocol as u8);
+    pub fn set_protocol(&mut self, socket: Socket, protocol: Protocol) -> Result<(), SpiError> {
+        self.write_u8(socket.at(SocketRegister::Mode), protocol as u8);
         Ok(())
     }
 
-    pub fn connect<E>(
+    pub fn connect(
         &mut self,
-        spi: &mut Spi<E>,
         socket: Socket,
         host_ip: &IpAddress,
         host_port: u16,
-    ) -> Result<(), E> {
+    ) -> Result<(), SpiError> {
         self.write_to(
-            spi,
             socket.at(SocketRegister::DestinationIp),
             &[
                 host_ip.address[0],
@@ -406,10 +378,9 @@ where
             ],
         )?;
 
-        self.write_u16(spi, socket.at(SocketRegister::DestinationPort), host_port)?;
+        self.write_u16(socket.at(SocketRegister::DestinationPort), host_port)?;
 
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Connect as u8,
         )?;
@@ -417,35 +388,29 @@ where
         Ok(())
     }
 
-    pub fn open_tcp<E>(&mut self, spi: &mut Spi<E>, socket: Socket) -> Result<(), E> {
+    pub fn open_tcp(&mut self, socket: Socket) -> Result<(), SpiError> {
         //      self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::TCP as u8);
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Open as u8,
         );
 
         loop {
-            let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
+            let status = self.read_u8(socket.at(SocketRegister::Status))?;
             if status == SocketStatus::Init as u8 {
                 return Ok(());
             }
         }
     }
 
-    pub fn send_tcp<E>(
-        &mut self,
-        spi: &mut Spi<E>,
-        socket: Socket,
-        data: &[u8],
-    ) -> Result<usize, E> {
+    pub fn send_tcp(&mut self, socket: Socket, data: &[u8]) -> Result<usize, SpiError> {
         let mut data_length = data.len() as u16;
 
         if data_length == 0 {
             return Ok(0);
         }
 
-        let max_length = self.read_u16(spi, socket.at(SocketRegister::TransmitBuffer))?;
+        let max_length = self.read_u16(socket.at(SocketRegister::TransmitBuffer))?;
 
         data_length = if data_length < max_length {
             data_length
@@ -453,37 +418,28 @@ where
             max_length
         };
         loop {
-            let tx_free_size = self.read_u16_atomic(spi, socket.at(SocketRegister::TxFreeSize))?;
+            let tx_free_size = self.read_u16_atomic(socket.at(SocketRegister::TxFreeSize))?;
             if data_length < tx_free_size {
                 break;
             }
         }
 
         // get the write pointer and write data at that address
-        let ptr = self.read_u16_atomic(spi, socket.at(SocketRegister::TxWritePointer))?;
-        self.write_to(
-            spi,
-            socket.tx_register_at(ptr),
-            &data[..data_length as usize],
-        );
+        let ptr = self.read_u16_atomic(socket.at(SocketRegister::TxWritePointer))?;
+        self.write_to(socket.tx_register_at(ptr), &data[..data_length as usize]);
 
         // update the write pointer
-        self.write_u16(
-            spi,
-            socket.at(SocketRegister::TxWritePointer),
-            ptr + data_length,
-        );
+        self.write_u16(socket.at(SocketRegister::TxWritePointer), ptr + data_length);
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Send as u8,
         )?;
 
         // wait for bytes to be sent and clear the interrupt
         loop {
-            let interrupt = self.read_u8(spi, socket.at(SocketRegister::Interrupt))?;
+            let interrupt = self.read_u8(socket.at(SocketRegister::Interrupt))?;
             if interrupt & 0b0001_0000 == 0b0001_0000 {
-                self.write_u8(spi, socket.at(SocketRegister::Interrupt), 0b0001_0000)?;
+                self.write_u8(socket.at(SocketRegister::Interrupt), 0b0001_0000)?;
                 break;
             }
         }
@@ -491,36 +447,34 @@ where
         Ok(data_length as usize)
     }
 
-    pub fn listen_tcp<E>(&mut self, spi: &mut Spi<E>, socket: Socket, port: u16) -> Result<(), E> {
-        self.write_u16(spi, socket.at(SocketRegister::LocalPort), port)?;
+    pub fn listen_tcp(&mut self, socket: Socket, port: u16) -> Result<(), SpiError> {
+        self.write_u16(socket.at(SocketRegister::LocalPort), port)?;
 
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Listen as u8,
         )?;
 
         loop {
-            let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
+            let status = self.read_u8(socket.at(SocketRegister::Status))?;
             if status == SocketStatus::Listen as u8 {
                 return Ok(());
             }
         }
     }
 
-    pub fn try_receive_tcp<E>(
+    pub fn try_receive_tcp(
         &mut self,
-        spi: &mut Spi<E>,
         socket: Socket,
         destination: &mut [u8],
-    ) -> Result<Option<(usize)>, E> {
-        if self.read_u8(spi, socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
+    ) -> Result<Option<(usize)>, SpiError> {
+        if self.read_u8(socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
             return Ok(None);
         }
 
         let receive_size = loop {
-            let s0 = self.read_u16(spi, socket.at(SocketRegister::RxReceivedSize))?;
-            let s1 = self.read_u16(spi, socket.at(SocketRegister::RxReceivedSize))?;
+            let s0 = self.read_u16(socket.at(SocketRegister::RxReceivedSize))?;
+            let s1 = self.read_u16(socket.at(SocketRegister::RxReceivedSize))?;
             if s0 == s1 {
                 break s0 as usize;
             }
@@ -537,21 +491,18 @@ where
             receive_size
         };
 
-        let read_pointer = self.read_u16(spi, socket.at(SocketRegister::RxReadPointer))?;
+        let read_pointer = self.read_u16(socket.at(SocketRegister::RxReadPointer))?;
         self.read_from(
-            spi,
             socket.rx_register_at(read_pointer),
             &mut destination[..size],
         )?;
 
         // reset
         self.write_u16(
-            spi,
             socket.at(SocketRegister::RxReadPointer),
             read_pointer + size as u16,
         )?;
         self.write_u8(
-            spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Recv as u8,
         )?;
@@ -561,35 +512,33 @@ where
     /// TODO destination buffer has to be as large as the receive buffer or complete read is not guaranteed
     pub fn try_receive_udp<E>(
         &mut self,
-        spi: &mut Spi<E>,
         socket: Socket,
         destination: &mut [u8],
-    ) -> Result<Option<(IpAddress, u16, usize)>, E> {
-        if self.read_u8(spi, socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
+    ) -> Result<Option<(IpAddress, u16, usize)>, SpiError> {
+        if self.read_u8(socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
             return Ok(None);
         }
         let receive_size = loop {
-            let s0 = self.read_u16(spi, socket.at(SocketRegister::RxReceivedSize))?;
-            let s1 = self.read_u16(spi, socket.at(SocketRegister::RxReceivedSize))?;
+            let s0 = self.read_u16(socket.at(SocketRegister::RxReceivedSize))?;
+            let s1 = self.read_u16(socket.at(SocketRegister::RxReceivedSize))?;
             if s0 == s1 {
                 break s0 as usize;
             }
         };
         if receive_size >= 8 {
-            let read_pointer = self.read_u16(spi, socket.at(SocketRegister::RxReadPointer))?;
+            let read_pointer = self.read_u16(socket.at(SocketRegister::RxReadPointer))?;
 
             // |<-- read_pointer                                read_pointer + received_size -->|
             // |Destination IP Address | Destination Port | Byte Size of DATA | Actual DATA ... |
             // |   --- 4 Bytes ---     |  --- 2 Bytes --- |  --- 2 Bytes ---  |      ....       |
 
-            let ip = self.read_ip(spi, socket.rx_register_at(read_pointer))?;
-            let port = self.read_u16(spi, socket.rx_register_at(read_pointer + 4))?;
+            let ip = self.read_ip(socket.rx_register_at(read_pointer))?;
+            let port = self.read_u16(socket.rx_register_at(read_pointer + 4))?;
             let data_length = destination
                 .len()
-                .min(self.read_u16(spi, socket.rx_register_at(read_pointer + 6))? as usize);
+                .min(self.read_u16(socket.rx_register_at(read_pointer + 6))? as usize);
 
             self.read_from(
-                spi,
                 socket.rx_register_at(read_pointer + 8),
                 &mut destination[..data_length],
             )?;
@@ -599,12 +548,10 @@ where
 
             // reset
             self.write_u16(
-                spi,
                 socket.at(SocketRegister::RxReadPointer),
                 read_pointer + receive_size as u16,
             )?;
             self.write_u8(
-                spi,
                 socket.at(SocketRegister::Command),
                 SocketCommand::Recv as u8,
             )?;
@@ -615,40 +562,35 @@ where
         }
     }
 
-    pub fn read_u8<E>(&mut self, spi: &mut Spi<E>, register: Register) -> Result<u8, E> {
+    pub fn read_u8(&mut self, register: Register) -> Result<u8, SpiError> {
         let mut buffer = [0u8; 1];
-        self.read_from(spi, register, &mut buffer)?;
+        self.read_from(register, &mut buffer)?;
         Ok(buffer[0])
     }
 
-    pub fn read_u16<E>(&mut self, spi: &mut Spi<E>, register: Register) -> Result<u16, E> {
+    pub fn read_u16(&mut self, register: Register) -> Result<u16, SpiError> {
         let mut buffer = [0u8; 2];
-        self.read_from(spi, register, &mut buffer)?;
+        self.read_from(register, &mut buffer)?;
         Ok(BigEndian::read_u16(&buffer))
     }
 
-    fn read_u16_atomic<E>(&mut self, spi: &mut Spi<E>, register: Register) -> Result<u16, E> {
+    fn read_u16_atomic(&mut self, register: Register) -> Result<u16, SpiError> {
         loop {
-            let s0 = self.read_u16(spi, register)?;
-            let s1 = self.read_u16(spi, register)?;
+            let s0 = self.read_u16(register)?;
+            let s1 = self.read_u16(register)?;
             if s0 == s1 {
                 return Ok(s0);
             }
         }
     }
 
-    pub fn read_ip<E>(&mut self, spi: &mut Spi<E>, register: Register) -> Result<IpAddress, E> {
+    pub fn read_ip(&mut self, register: Register) -> Result<IpAddress, SpiError> {
         let mut ip = IpAddress::default();
-        self.read_from(spi, register, &mut ip.address)?;
+        self.read_from(register, &mut ip.address)?;
         Ok(ip)
     }
 
-    pub fn read_from<E>(
-        &mut self,
-        spi: &mut Spi<E>,
-        register: Register,
-        target: &mut [u8],
-    ) -> Result<(), E> {
+    pub fn read_from(&mut self, register: Register, target: &mut [u8]) -> Result<(), SpiError> {
         self.chip_select();
         let mut request = [
             0_u8,
@@ -657,38 +599,23 @@ where
         ];
         BigEndian::write_u16(&mut request[..2], register.address());
         let result = self
-            .write_bytes(spi, &request)
-            .and_then(|_| self.read_bytes(spi, target));
+            .write_bytes(&request)
+            .and_then(|_| self.read_bytes(target));
         self.chip_deselect();
         result
     }
 
-    pub fn write_u8<E>(
-        &mut self,
-        spi: &mut Spi<E>,
-        register: Register,
-        value: u8,
-    ) -> Result<(), E> {
-        self.write_to(spi, register, &[value])
+    pub fn write_u8(&mut self, register: Register, value: u8) -> Result<(), SpiError> {
+        self.write_to(register, &[value])
     }
 
-    pub fn write_u16<E>(
-        &mut self,
-        spi: &mut Spi<E>,
-        register: Register,
-        value: u16,
-    ) -> Result<(), E> {
+    pub fn write_u16(&mut self, register: Register, value: u16) -> Result<(), SpiError> {
         let mut data = [0u8; 2];
         BigEndian::write_u16(&mut data, value);
-        self.write_to(spi, register, &data)
+        self.write_to(register, &data)
     }
 
-    pub fn write_to<E>(
-        &mut self,
-        spi: &mut Spi<E>,
-        register: Register,
-        data: &[u8],
-    ) -> Result<(), E> {
+    pub fn write_to(&mut self, register: Register, data: &[u8]) -> Result<(), SpiError> {
         self.chip_select();
         let mut request = [
             0_u8,
@@ -697,22 +624,22 @@ where
         ];
         BigEndian::write_u16(&mut request[..2], register.address());
         let result = self
-            .write_bytes(spi, &request)
-            .and_then(|_| self.write_bytes(spi, data));
+            .write_bytes(&request)
+            .and_then(|_| self.write_bytes(data));
         self.chip_deselect();
         result
     }
 
-    fn read_bytes<E>(&mut self, spi: &mut Spi<E>, bytes: &mut [u8]) -> Result<(), E> {
+    fn read_bytes(&mut self, bytes: &mut [u8]) -> Result<(), SpiError> {
         for i in 0..bytes.len() {
-            bytes[i] = self.read(spi)?;
+            bytes[i] = self.read()?;
         }
         Ok(())
     }
 
-    fn read<E>(&mut self, spi: &mut Spi<E>) -> Result<u8, E> {
+    fn read(&mut self) -> Result<u8, SpiError> {
         let command = &mut [0x00];
-        let result = spi.transfer(command)?;
+        let result = self.spi.transfer(command)?;
         Ok(result[0])
 
         // FullDuplex
@@ -721,15 +648,15 @@ where
         // result
     }
 
-    fn write_bytes<E>(&mut self, spi: &mut Spi<E>, bytes: &[u8]) -> Result<(), E> {
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<(), SpiError> {
         for b in bytes {
-            self.write(spi, *b)?;
+            self.write(*b)?;
         }
         Ok(())
     }
 
-    fn write<E>(&mut self, spi: &mut Spi<E>, byte: u8) -> Result<(), E> {
-        spi.transfer(&mut [byte])?;
+    fn write(&mut self, byte: u8) -> Result<(), SpiError> {
+        self.spi.transfer(&mut [byte])?;
         Ok(())
 
         // FullDuplex
