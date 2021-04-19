@@ -546,6 +546,28 @@ where
         }
     }
 
+    pub fn send_keep_alive_tcp<E>(
+        &mut self,
+        spi: &mut dyn FullDuplex<u8, Error = E>,
+        socket: Socket,
+        port: u16,
+    ) -> Result<(), E> {
+        self.write_u16(spi, socket.at(SocketRegister::LocalPort), port)?;
+
+        self.write_u8(
+            spi,
+            socket.at(SocketRegister::Command),
+            SocketCommand::Listen as u8,
+        )?;
+
+        loop {
+            let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
+            if status == SocketStatus::Listen as u8 {
+                return Ok(());
+            }
+        }
+    }
+
     pub fn try_receive_tcp<E>(
         &mut self,
         spi: &mut dyn FullDuplex<u8, Error = E>,
