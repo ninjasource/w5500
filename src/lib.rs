@@ -1,5 +1,4 @@
 #![no_std]
-#![allow(unused)]
 
 extern crate byteorder;
 extern crate embedded_hal as hal;
@@ -21,8 +20,12 @@ pub enum Error<SpiError, PinError> {
     Spi(SpiError),
     /// CS output pin error
     Pin(PinError),
-    /// Some other error
-    Other,
+}
+
+impl<SpiError, PinError> From<SpiError> for Error<SpiError, PinError> {
+    fn from(err: SpiError) -> Self {
+        Self::Spi(err)
+    }
 }
 
 #[derive(Copy, Clone, PartialOrd, PartialEq, Default, Debug)]
@@ -88,13 +91,13 @@ where
         W5500 { cs }
     }
 
-    pub fn init<E>(&mut self, spi: &mut Spi<E>) -> Result<(), E> {
+    pub fn init<E>(&mut self, spi: &mut Spi<E>) -> Result<(), Error<E, PinError>> {
         self.reset(spi)?;
         self.set_mode(spi, false, false, false, false)?;
         Ok(())
     }
 
-    pub fn reset<E>(&mut self, spi: &mut Spi<E>) -> Result<(), E> {
+    pub fn reset<E>(&mut self, spi: &mut Spi<E>) -> Result<(), Error<E, PinError>> {
         self.write_to(
             spi,
             Register::CommonRegister(0x00_00_u16),
@@ -111,7 +114,7 @@ where
         ping_block: bool,
         ppoe: bool,
         force_arp: bool,
-    ) -> Result<(), E> {
+    ) -> Result<(), Error<E, PinError>> {
         let mut mode = 0x00;
 
         if wol {
@@ -133,7 +136,11 @@ where
         self.write_to(spi, Register::CommonRegister(0x00_00_u16), &[mode])
     }
 
-    pub fn set_interrupt_mask<E>(&mut self, spi: &mut Spi<E>, sockets: &[Socket]) -> Result<(), E> {
+    pub fn set_interrupt_mask<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        sockets: &[Socket],
+    ) -> Result<(), Error<E, PinError>> {
         let mut mask = 0u8;
         for socket in sockets.iter() {
             mask |= match *socket {
@@ -155,7 +162,7 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         interrupts: &[Interrupt],
-    ) -> Result<(), E> {
+    ) -> Result<(), Error<E, PinError>> {
         let mut mask = 0u8;
         for interrupt in interrupts.iter() {
             mask |= *interrupt as u8;
@@ -163,25 +170,41 @@ where
         self.write_to(spi, socket.at(SocketRegister::InterruptMask), &[mask])
     }
 
-    pub fn set_gateway<E>(&mut self, spi: &mut Spi<E>, gateway: &IpAddress) -> Result<(), E> {
+    pub fn set_gateway<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        gateway: &IpAddress,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, Register::CommonRegister(0x00_01_u16), &gateway.address)
     }
 
-    pub fn set_subnet<E>(&mut self, spi: &mut Spi<E>, subnet: &IpAddress) -> Result<(), E> {
+    pub fn set_subnet<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        subnet: &IpAddress,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, Register::CommonRegister(0x00_05_u16), &subnet.address)
     }
 
-    pub fn set_mac<E>(&mut self, spi: &mut Spi<E>, mac: &MacAddress) -> Result<(), E> {
+    pub fn set_mac<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        mac: &MacAddress,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, Register::CommonRegister(0x00_09_u16), &mac.address)
     }
 
-    pub fn get_mac<E>(&mut self, spi: &mut Spi<E>) -> Result<MacAddress, E> {
+    pub fn get_mac<E>(&mut self, spi: &mut Spi<E>) -> Result<MacAddress, Error<E, PinError>> {
         let mut mac = MacAddress::default();
         self.read_from(spi, Register::CommonRegister(0x00_09_u16), &mut mac.address)?;
         Ok(mac)
     }
 
-    pub fn set_ip<E>(&mut self, spi: &mut Spi<E>, ip: &IpAddress) -> Result<(), E> {
+    pub fn set_ip<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        ip: &IpAddress,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, Register::CommonRegister(0x00_0F_u16), &ip.address)
     }
 
@@ -190,7 +213,7 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         interrupt: Interrupt,
-    ) -> Result<bool, E> {
+    ) -> Result<bool, Error<E, PinError>> {
         let mut state = [0u8; 1];
         self.read_from(spi, socket.at(SocketRegister::Interrupt), &mut state)?;
         Ok(state[0] & interrupt as u8 != 0)
@@ -201,7 +224,7 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         interrupt: Interrupt,
-    ) -> Result<(), E> {
+    ) -> Result<(), Error<E, PinError>> {
         self.write_to(
             spi,
             socket.at(SocketRegister::Interrupt),
@@ -209,7 +232,7 @@ where
         )
     }
 
-    pub fn close<E>(&mut self, spi: &mut Spi<E>, socket: Socket) -> Result<(), E> {
+    pub fn close<E>(&mut self, spi: &mut Spi<E>, socket: Socket) -> Result<(), Error<E, PinError>> {
         self.write_u8(
             spi,
             socket.at(SocketRegister::Command),
@@ -217,7 +240,11 @@ where
         )
     }
 
-    pub fn dissconnect<E>(&mut self, spi: &mut Spi<E>, socket: Socket) -> Result<(), E> {
+    pub fn dissconnect<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        socket: Socket,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_u8(
             spi,
             socket.at(SocketRegister::Command),
@@ -229,7 +256,7 @@ where
         &mut self,
         spi: &mut Spi<E>,
         socket: Socket,
-    ) -> Result<Option<SocketStatus>, E> {
+    ) -> Result<Option<SocketStatus>, Error<E, PinError>> {
         let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
 
         Ok(match status {
@@ -255,7 +282,7 @@ where
         &mut self,
         spi: &mut Spi<E>,
         socket: Socket,
-    ) -> Result<(u8, u8, u8, u8, u16, u8), E> {
+    ) -> Result<(u8, u8, u8, u8, u16, u8), Error<E, PinError>> {
         let mode = self.read_u8(spi, socket.at(SocketRegister::Mode))?;
         let command = self.read_u8(spi, socket.at(SocketRegister::Command))?;
         let interrupt = self.read_u8(spi, socket.at(SocketRegister::Interrupt))?;
@@ -264,13 +291,6 @@ where
         let interrupt_mask = self.read_u8(spi, socket.at(SocketRegister::InterruptMask))?;
 
         Ok((mode, command, status, interrupt, port, interrupt_mask))
-
-        /*
-        if  & 0x17 == 0 {
-            return Ok(false);
-        }
-
-        Ok(true)*/
     }
 
     pub fn send_udp<E>(
@@ -281,7 +301,7 @@ where
         host: &IpAddress,
         host_port: u16,
         data: &[u8],
-    ) -> Result<(), E> {
+    ) -> Result<(), Error<E, PinError>> {
         // TODO not always socket 0
         // TODO check if in use
 
@@ -292,7 +312,7 @@ where
                 Protocol::UDP as u8,       // Socket Mode Register
                 SocketCommand::Open as u8, // Socket Command Regsiter
             ],
-        );
+        )?;
 
         {
             let local_port = u16_to_be_bytes(local_port);
@@ -328,14 +348,14 @@ where
                 spi,
                 socket.at(SocketRegister::TxReadPointer),
                 &[0x00, 0x00, data_length[0], data_length[1]],
-            );
+            )?;
         }
 
         self.write_to(
             spi,
             socket.tx_register_at(0x00_00),
             &data[..data_length as usize],
-        );
+        )?;
 
         self.write_u8(
             spi,
@@ -344,25 +364,19 @@ where
         )
     }
 
-    pub fn listen_udp<E>(&mut self, spi: &mut Spi<E>, socket: Socket, port: u16) -> Result<(), E> {
+    pub fn listen_udp<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        socket: Socket,
+        port: u16,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_u16(spi, socket.at(SocketRegister::LocalPort), port)?;
-
-        self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::UDP as u8);
+        self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::UDP as u8)?;
         self.write_u8(
             spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Open as u8,
         )
-
-        /*
-        self.write_to(
-            spi,
-            socket.at(SocketRegister::Mode),
-            &[
-                Protocol::UDP as u8, // Socket Mode Register
-                SocketCommand::Open as u8 // Socket Command Regsiter
-            ]
-        )*/
     }
 
     pub fn set_protocol<E>(
@@ -370,8 +384,8 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         protocol: Protocol,
-    ) -> Result<(), E> {
-        self.write_u8(spi, socket.at(SocketRegister::Mode), protocol as u8);
+    ) -> Result<(), Error<E, PinError>> {
+        self.write_u8(spi, socket.at(SocketRegister::Mode), protocol as u8)?;
         Ok(())
     }
 
@@ -381,7 +395,7 @@ where
         socket: Socket,
         host_ip: &IpAddress,
         host_port: u16,
-    ) -> Result<(), E> {
+    ) -> Result<(), Error<E, PinError>> {
         self.write_to(
             spi,
             socket.at(SocketRegister::DestinationIp),
@@ -404,13 +418,16 @@ where
         Ok(())
     }
 
-    pub fn open_tcp<E>(&mut self, spi: &mut Spi<E>, socket: Socket) -> Result<(), E> {
-        //      self.write_u8(spi, socket.at(SocketRegister::Mode), Protocol::TCP as u8);
+    pub fn open_tcp<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        socket: Socket,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_u8(
             spi,
             socket.at(SocketRegister::Command),
             SocketCommand::Open as u8,
-        );
+        )?;
 
         loop {
             let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
@@ -425,7 +442,7 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         data: &[u8],
-    ) -> Result<usize, E> {
+    ) -> Result<usize, Error<E, PinError>> {
         let mut data_length = data.len() as u16;
 
         if data_length == 0 {
@@ -452,14 +469,14 @@ where
             spi,
             socket.tx_register_at(ptr),
             &data[..data_length as usize],
-        );
+        )?;
 
         // update the write pointer
         self.write_u16(
             spi,
             socket.at(SocketRegister::TxWritePointer),
             ptr + data_length,
-        );
+        )?;
         self.write_u8(
             spi,
             socket.at(SocketRegister::Command),
@@ -478,7 +495,12 @@ where
         Ok(data_length as usize)
     }
 
-    pub fn listen_tcp<E>(&mut self, spi: &mut Spi<E>, socket: Socket, port: u16) -> Result<(), E> {
+    pub fn listen_tcp<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        socket: Socket,
+        port: u16,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_u16(spi, socket.at(SocketRegister::LocalPort), port)?;
 
         self.write_u8(
@@ -500,7 +522,7 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         port: u16,
-    ) -> Result<(), E> {
+    ) -> Result<(), Error<E, PinError>> {
         self.write_u16(spi, socket.at(SocketRegister::LocalPort), port)?;
 
         self.write_u8(
@@ -522,7 +544,7 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         destination: &mut [u8],
-    ) -> Result<Option<usize>, E> {
+    ) -> Result<Option<usize>, Error<E, PinError>> {
         if self.read_u8(spi, socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
             return Ok(None);
         }
@@ -573,7 +595,7 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         destination: &mut [u8],
-    ) -> Result<Option<(IpAddress, u16, usize)>, E> {
+    ) -> Result<Option<(IpAddress, u16, usize)>, Error<E, PinError>> {
         if self.read_u8(spi, socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
             return Ok(None);
         }
@@ -590,7 +612,6 @@ where
             // |<-- read_pointer                                read_pointer + received_size -->|
             // |Destination IP Address | Destination Port | Byte Size of DATA | Actual DATA ... |
             // |   --- 4 Bytes ---     |  --- 2 Bytes --- |  --- 2 Bytes ---  |      ....       |
-
             let ip = self.read_ip(spi, socket.rx_register_at(read_pointer))?;
             let port = self.read_u16(spi, socket.rx_register_at(read_pointer + 4))?;
             let data_length = destination
@@ -602,9 +623,6 @@ where
                 socket.rx_register_at(read_pointer + 8),
                 &mut destination[..data_length],
             )?;
-
-            // self.read_from(socket.register_at(0x00_0C), &mut ip.address)?;
-            // self.read_u16(socket.register_at(0x00_10))?;
 
             // reset
             self.write_u16(
@@ -624,19 +642,31 @@ where
         }
     }
 
-    pub fn read_u8<E>(&mut self, spi: &mut Spi<E>, register: Register) -> Result<u8, E> {
+    pub fn read_u8<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        register: Register,
+    ) -> Result<u8, Error<E, PinError>> {
         let mut buffer = [0u8; 1];
         self.read_from(spi, register, &mut buffer)?;
         Ok(buffer[0])
     }
 
-    pub fn read_u16<E>(&mut self, spi: &mut Spi<E>, register: Register) -> Result<u16, E> {
+    pub fn read_u16<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        register: Register,
+    ) -> Result<u16, Error<E, PinError>> {
         let mut buffer = [0u8; 2];
         self.read_from(spi, register, &mut buffer)?;
         Ok(BigEndian::read_u16(&buffer))
     }
 
-    fn read_u16_atomic<E>(&mut self, spi: &mut Spi<E>, register: Register) -> Result<u16, E> {
+    fn read_u16_atomic<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        register: Register,
+    ) -> Result<u16, Error<E, PinError>> {
         loop {
             let s0 = self.read_u16(spi, register)?;
             let s1 = self.read_u16(spi, register)?;
@@ -646,7 +676,11 @@ where
         }
     }
 
-    pub fn read_ip<E>(&mut self, spi: &mut Spi<E>, register: Register) -> Result<IpAddress, E> {
+    pub fn read_ip<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        register: Register,
+    ) -> Result<IpAddress, Error<E, PinError>> {
         let mut ip = IpAddress::default();
         self.read_from(spi, register, &mut ip.address)?;
         Ok(ip)
@@ -657,8 +691,8 @@ where
         spi: &mut Spi<E>,
         register: Register,
         target: &mut [u8],
-    ) -> Result<(), E> {
-        self.chip_select();
+    ) -> Result<(), Error<E, PinError>> {
+        self.chip_select().map_err(Error::Pin)?;
         let mut request = [
             0_u8,
             0_u8,
@@ -668,7 +702,7 @@ where
         let result = self
             .write_bytes(spi, &request)
             .and_then(|_| self.read_bytes(spi, target));
-        self.chip_deselect();
+        self.chip_deselect().map_err(Error::Pin)?;
         result
     }
 
@@ -677,7 +711,7 @@ where
         spi: &mut Spi<E>,
         register: Register,
         value: u8,
-    ) -> Result<(), E> {
+    ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, register, &[value])
     }
 
@@ -686,7 +720,7 @@ where
         spi: &mut Spi<E>,
         register: Register,
         value: u16,
-    ) -> Result<(), E> {
+    ) -> Result<(), Error<E, PinError>> {
         let mut data = [0u8; 2];
         BigEndian::write_u16(&mut data, value);
         self.write_to(spi, register, &data)
@@ -697,8 +731,8 @@ where
         spi: &mut Spi<E>,
         register: Register,
         data: &[u8],
-    ) -> Result<(), E> {
-        self.chip_select();
+    ) -> Result<(), Error<E, PinError>> {
+        self.chip_select().map_err(Error::Pin)?;
         let mut request = [
             0_u8,
             0_u8,
@@ -708,41 +742,45 @@ where
         let result = self
             .write_bytes(spi, &request)
             .and_then(|_| self.write_bytes(spi, data));
-        self.chip_deselect();
+        self.chip_deselect().map_err(Error::Pin)?;
         result
     }
 
-    fn read_bytes<E>(&mut self, spi: &mut Spi<E>, bytes: &mut [u8]) -> Result<(), E> {
+    fn read_bytes<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        bytes: &mut [u8],
+    ) -> Result<(), Error<E, PinError>> {
         for i in 0..bytes.len() {
             bytes[i] = self.read(spi)?;
         }
         Ok(())
     }
 
-    fn read<E>(&mut self, spi: &mut Spi<E>) -> Result<u8, E> {
+    fn read<E>(&mut self, spi: &mut Spi<E>) -> Result<u8, Error<E, PinError>> {
         let command = &mut [0x00];
         let result = spi.transfer(command)?;
         Ok(result[0])
     }
 
-    fn write_bytes<E>(&mut self, spi: &mut Spi<E>, bytes: &[u8]) -> Result<(), E> {
+    fn write_bytes<E>(&mut self, spi: &mut Spi<E>, bytes: &[u8]) -> Result<(), Error<E, PinError>> {
         for b in bytes {
             self.write(spi, *b)?;
         }
         Ok(())
     }
 
-    fn write<E>(&mut self, spi: &mut Spi<E>, byte: u8) -> Result<(), E> {
+    fn write<E>(&mut self, spi: &mut Spi<E>, byte: u8) -> Result<(), Error<E, PinError>> {
         spi.transfer(&mut [byte])?;
         Ok(())
     }
 
-    fn chip_select(&mut self) {
-        self.cs.set_low();
+    fn chip_select(&mut self) -> Result<(), PinError> {
+        self.cs.set_low()
     }
 
-    fn chip_deselect(&mut self) {
-        self.cs.set_high();
+    fn chip_deselect(&mut self) -> Result<(), PinError> {
+        self.cs.set_high()
     }
 }
 
