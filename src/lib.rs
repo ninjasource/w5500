@@ -5,28 +5,22 @@
 extern crate byteorder;
 extern crate embedded_hal as hal;
 
-use hal::blocking::spi::Transfer;
-// use hal::digital::OutputPin;
-use hal::digital::v2::OutputPin;
-// use hal::spi::FullDuplex;
-// use core::fmt::Error;
-
 use byteorder::BigEndian;
 use byteorder::ByteOrder;
+use hal::blocking::spi::Transfer;
+use hal::digital::v2::OutputPin;
 
 #[macro_use(block)]
 extern crate nb;
 
 const COMMAND_READ: u8 = 0x00 << 2;
 const COMMAND_WRITE: u8 = 0x01 << 2;
-
 const VARIABLE_DATA_LENGTH: u8 = 0b_00;
 const FIXED_DATA_LENGTH_1_BYTE: u8 = 0b_01;
 const FIXED_DATA_LENGTH_2_BYTES: u8 = 0b_10;
 const FIXED_DATA_LENGTH_4_BYTES: u8 = 0b_11;
 
 type Spi<E> = dyn Transfer<u8, Error = E>;
-//type Spi<E> = dyn FullDuplex<u8, Error = E>;
 
 #[derive(Debug)]
 pub enum Error<SpiError, PinError> {
