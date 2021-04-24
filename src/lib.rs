@@ -1,6 +1,5 @@
 #![no_std]
 #![allow(unused)]
-#![allow(deprecated)]
 
 extern crate byteorder;
 extern crate embedded_hal as hal;
@@ -10,15 +9,9 @@ use byteorder::ByteOrder;
 use hal::blocking::spi::Transfer;
 use hal::digital::v2::OutputPin;
 
-#[macro_use(block)]
-extern crate nb;
-
 const COMMAND_READ: u8 = 0x00 << 2;
 const COMMAND_WRITE: u8 = 0x01 << 2;
 const VARIABLE_DATA_LENGTH: u8 = 0b_00;
-const FIXED_DATA_LENGTH_1_BYTE: u8 = 0b_01;
-const FIXED_DATA_LENGTH_2_BYTES: u8 = 0b_10;
-const FIXED_DATA_LENGTH_4_BYTES: u8 = 0b_11;
 
 type Spi<E> = dyn Transfer<u8, Error = E>;
 
@@ -122,19 +115,19 @@ where
         let mut mode = 0x00;
 
         if wol {
-            mode |= (1 << 5);
+            mode |= 1 << 5;
         }
 
         if ping_block {
-            mode |= (1 << 4);
+            mode |= 1 << 4;
         }
 
         if ppoe {
-            mode |= (1 << 3);
+            mode |= 1 << 3;
         }
 
         if force_arp {
-            mode |= (1 << 1);
+            mode |= 1 << 1;
         }
 
         self.write_to(spi, Register::CommonRegister(0x00_00_u16), &[mode])
@@ -504,7 +497,7 @@ where
 
     pub fn send_keep_alive_tcp<E>(
         &mut self,
-        spi: &mut dyn FullDuplex<u8, Error = E>,
+        spi: &mut Spi<E>,
         socket: Socket,
         port: u16,
     ) -> Result<(), E> {
@@ -529,7 +522,7 @@ where
         spi: &mut Spi<E>,
         socket: Socket,
         destination: &mut [u8],
-    ) -> Result<Option<(usize)>, E> {
+    ) -> Result<Option<usize>, E> {
         if self.read_u8(spi, socket.at(SocketRegister::InterruptMask))? & 0x04 == 0 {
             return Ok(None);
         }
@@ -730,11 +723,6 @@ where
         let command = &mut [0x00];
         let result = spi.transfer(command)?;
         Ok(result[0])
-
-        // FullDuplex
-        // block!(spi.send(0x00))?;
-        // let result = block!(spi.read());
-        // result
     }
 
     fn write_bytes<E>(&mut self, spi: &mut Spi<E>, bytes: &[u8]) -> Result<(), E> {
@@ -747,11 +735,6 @@ where
     fn write<E>(&mut self, spi: &mut Spi<E>, byte: u8) -> Result<(), E> {
         spi.transfer(&mut [byte])?;
         Ok(())
-
-        // FullDuplex
-        // block!(spi.send(byte))?;
-        // block!(spi.read())?;
-        // Ok(())
     }
 
     fn chip_select(&mut self) {
