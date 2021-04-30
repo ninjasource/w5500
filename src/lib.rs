@@ -83,6 +83,15 @@ pub struct W5500<CS> {
     cs: CS,
 }
 
+pub enum BufferSize {
+    Size0KB,
+    Size1KB,
+    Size2KBDefault,
+    Size4KB,
+    Size8KB,
+    Size16KB,
+}
+
 impl<CS, PinError> W5500<CS>
 where
     CS: OutputPin<Error = PinError>,
@@ -515,6 +524,44 @@ where
                 return Ok(());
             }
         }
+    }
+
+    pub fn set_rx_buffer_size<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        socket: Socket,
+        buffer_size: BufferSize,
+    ) -> Result<(), Error<E, PinError>> {
+        let value = match buffer_size {
+            BufferSize::Size0KB => 0,
+            BufferSize::Size1KB => 1,
+            BufferSize::Size2KBDefault => 2,
+            BufferSize::Size4KB => 4,
+            BufferSize::Size8KB => 8,
+            BufferSize::Size16KB => 16,
+        };
+
+        self.write_u8(spi, socket.at(SocketRegister::ReceiveBuffer), value)?;
+        Ok(())
+    }
+
+    pub fn set_tx_buffer_size<E>(
+        &mut self,
+        spi: &mut Spi<E>,
+        socket: Socket,
+        buffer_size: BufferSize,
+    ) -> Result<(), Error<E, PinError>> {
+        let value = match buffer_size {
+            BufferSize::Size0KB => 0,
+            BufferSize::Size1KB => 1,
+            BufferSize::Size2KBDefault => 2,
+            BufferSize::Size4KB => 4,
+            BufferSize::Size8KB => 8,
+            BufferSize::Size16KB => 16,
+        };
+
+        self.write_u8(spi, socket.at(SocketRegister::TransmitBuffer), value)?;
+        Ok(())
     }
 
     pub fn send_keep_alive_tcp<E>(
