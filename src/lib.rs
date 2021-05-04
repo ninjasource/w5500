@@ -12,8 +12,6 @@ const COMMAND_READ: u8 = 0x00 << 2;
 const COMMAND_WRITE: u8 = 0x01 << 2;
 const VARIABLE_DATA_LENGTH: u8 = 0b_00;
 
-type Spi<E> = dyn Transfer<u8, Error = E>;
-
 #[derive(Debug)]
 pub enum Error<SpiError, PinError> {
     /// SPI communication error
@@ -100,13 +98,19 @@ where
         W5500 { cs }
     }
 
-    pub fn init<E>(&mut self, spi: &mut Spi<E>) -> Result<(), Error<E, PinError>> {
+    pub fn init<E>(
+        &mut self,
+        spi: &mut impl Transfer<u8, Error = E>,
+    ) -> Result<(), Error<E, PinError>> {
         self.reset(spi)?;
         self.set_mode(spi, false, false, false, false)?;
         Ok(())
     }
 
-    pub fn reset<E>(&mut self, spi: &mut Spi<E>) -> Result<(), Error<E, PinError>> {
+    pub fn reset<E>(
+        &mut self,
+        spi: &mut impl Transfer<u8, Error = E>,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_to(
             spi,
             Register::CommonRegister(0x00_00_u16),
@@ -118,7 +122,7 @@ where
 
     pub fn set_mode<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         wol: bool,
         ping_block: bool,
         ppoe: bool,
@@ -147,7 +151,7 @@ where
 
     pub fn set_interrupt_mask<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         sockets: &[Socket],
     ) -> Result<(), Error<E, PinError>> {
         let mut mask = 0u8;
@@ -168,7 +172,7 @@ where
 
     pub fn set_socket_interrupt_mask<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         interrupts: &[Interrupt],
     ) -> Result<(), Error<E, PinError>> {
@@ -181,7 +185,7 @@ where
 
     pub fn set_gateway<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         gateway: &IpAddress,
     ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, Register::CommonRegister(0x00_01_u16), &gateway.address)
@@ -189,7 +193,7 @@ where
 
     pub fn set_subnet<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         subnet: &IpAddress,
     ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, Register::CommonRegister(0x00_05_u16), &subnet.address)
@@ -197,13 +201,16 @@ where
 
     pub fn set_mac<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         mac: &MacAddress,
     ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, Register::CommonRegister(0x00_09_u16), &mac.address)
     }
 
-    pub fn get_mac<E>(&mut self, spi: &mut Spi<E>) -> Result<MacAddress, Error<E, PinError>> {
+    pub fn get_mac<E>(
+        &mut self,
+        spi: &mut impl Transfer<u8, Error = E>,
+    ) -> Result<MacAddress, Error<E, PinError>> {
         let mut mac = MacAddress::default();
         self.read_from(spi, Register::CommonRegister(0x00_09_u16), &mut mac.address)?;
         Ok(mac)
@@ -211,7 +218,7 @@ where
 
     pub fn set_ip<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         ip: &IpAddress,
     ) -> Result<(), Error<E, PinError>> {
         self.write_to(spi, Register::CommonRegister(0x00_0F_u16), &ip.address)
@@ -219,7 +226,7 @@ where
 
     pub fn is_interrupt_set<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         interrupt: Interrupt,
     ) -> Result<bool, Error<E, PinError>> {
@@ -230,7 +237,7 @@ where
 
     pub fn reset_interrupt<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         interrupt: Interrupt,
     ) -> Result<(), Error<E, PinError>> {
@@ -241,7 +248,11 @@ where
         )
     }
 
-    pub fn close<E>(&mut self, spi: &mut Spi<E>, socket: Socket) -> Result<(), Error<E, PinError>> {
+    pub fn close<E>(
+        &mut self,
+        spi: &mut impl Transfer<u8, Error = E>,
+        socket: Socket,
+    ) -> Result<(), Error<E, PinError>> {
         self.write_u8(
             spi,
             socket.at(SocketRegister::Command),
@@ -251,7 +262,7 @@ where
 
     pub fn dissconnect<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
     ) -> Result<(), Error<E, PinError>> {
         self.write_u8(
@@ -263,7 +274,7 @@ where
 
     pub fn get_socket_status<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
     ) -> Result<Option<SocketStatus>, Error<E, PinError>> {
         let status = self.read_u8(spi, socket.at(SocketRegister::Status))?;
@@ -289,7 +300,7 @@ where
     // See pages 46 and 49
     pub fn read_registers<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
     ) -> Result<(u8, u8, u8, u8, u16, u8), Error<E, PinError>> {
         let mode = self.read_u8(spi, socket.at(SocketRegister::Mode))?;
@@ -304,7 +315,7 @@ where
 
     pub fn send_udp<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         local_port: u16,
         host: &IpAddress,
@@ -375,7 +386,7 @@ where
 
     pub fn listen_udp<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         port: u16,
     ) -> Result<(), Error<E, PinError>> {
@@ -390,7 +401,7 @@ where
 
     pub fn set_protocol<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         protocol: Protocol,
     ) -> Result<(), Error<E, PinError>> {
@@ -400,7 +411,7 @@ where
 
     pub fn connect<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         host_ip: &IpAddress,
         host_port: u16,
@@ -429,7 +440,7 @@ where
 
     pub fn open_tcp<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
     ) -> Result<(), Error<E, PinError>> {
         self.write_u8(
@@ -448,7 +459,7 @@ where
 
     pub fn send_tcp<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         data: &[u8],
     ) -> Result<usize, Error<E, PinError>> {
@@ -506,7 +517,7 @@ where
 
     pub fn listen_tcp<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         port: u16,
     ) -> Result<(), Error<E, PinError>> {
@@ -528,7 +539,7 @@ where
 
     pub fn set_rx_buffer_size<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         buffer_size: BufferSize,
     ) -> Result<(), Error<E, PinError>> {
@@ -547,7 +558,7 @@ where
 
     pub fn set_tx_buffer_size<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         buffer_size: BufferSize,
     ) -> Result<(), Error<E, PinError>> {
@@ -566,7 +577,7 @@ where
 
     pub fn send_keep_alive_tcp<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         port: u16,
     ) -> Result<(), Error<E, PinError>> {
@@ -588,7 +599,7 @@ where
 
     pub fn try_receive_tcp<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         destination: &mut [u8],
     ) -> Result<Option<usize>, Error<E, PinError>> {
@@ -639,7 +650,7 @@ where
     /// TODO destination buffer has to be as large as the receive buffer or complete read is not guaranteed
     pub fn try_receive_udp<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         socket: Socket,
         destination: &mut [u8],
     ) -> Result<Option<(IpAddress, u16, usize)>, Error<E, PinError>> {
@@ -691,7 +702,7 @@ where
 
     pub fn read_u8<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         register: Register,
     ) -> Result<u8, Error<E, PinError>> {
         let mut buffer = [0u8; 1];
@@ -701,7 +712,7 @@ where
 
     pub fn read_u16<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         register: Register,
     ) -> Result<u16, Error<E, PinError>> {
         let mut buffer = [0u8; 2];
@@ -711,7 +722,7 @@ where
 
     fn read_u16_atomic<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         register: Register,
     ) -> Result<u16, Error<E, PinError>> {
         loop {
@@ -725,7 +736,7 @@ where
 
     pub fn read_ip<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         register: Register,
     ) -> Result<IpAddress, Error<E, PinError>> {
         let mut ip = IpAddress::default();
@@ -735,7 +746,7 @@ where
 
     pub fn read_from<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         register: Register,
         target: &mut [u8],
     ) -> Result<(), Error<E, PinError>> {
@@ -755,7 +766,7 @@ where
 
     pub fn write_u8<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         register: Register,
         value: u8,
     ) -> Result<(), Error<E, PinError>> {
@@ -764,7 +775,7 @@ where
 
     pub fn write_u16<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         register: Register,
         value: u16,
     ) -> Result<(), Error<E, PinError>> {
@@ -775,7 +786,7 @@ where
 
     pub fn write_to<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         register: Register,
         data: &[u8],
     ) -> Result<(), Error<E, PinError>> {
@@ -795,7 +806,7 @@ where
 
     fn read_bytes<E>(
         &mut self,
-        spi: &mut Spi<E>,
+        spi: &mut impl Transfer<u8, Error = E>,
         bytes: &mut [u8],
     ) -> Result<(), Error<E, PinError>> {
         for i in 0..bytes.len() {
@@ -804,20 +815,31 @@ where
         Ok(())
     }
 
-    fn read<E>(&mut self, spi: &mut Spi<E>) -> Result<u8, Error<E, PinError>> {
+    fn read<E>(
+        &mut self,
+        spi: &mut impl Transfer<u8, Error = E>,
+    ) -> Result<u8, Error<E, PinError>> {
         let command = &mut [0x00];
         let result = spi.transfer(command)?;
         Ok(result[0])
     }
 
-    fn write_bytes<E>(&mut self, spi: &mut Spi<E>, bytes: &[u8]) -> Result<(), Error<E, PinError>> {
+    fn write_bytes<E>(
+        &mut self,
+        spi: &mut impl Transfer<u8, Error = E>,
+        bytes: &[u8],
+    ) -> Result<(), Error<E, PinError>> {
         for b in bytes {
             self.write(spi, *b)?;
         }
         Ok(())
     }
 
-    fn write<E>(&mut self, spi: &mut Spi<E>, byte: u8) -> Result<(), Error<E, PinError>> {
+    fn write<E>(
+        &mut self,
+        spi: &mut impl Transfer<u8, Error = E>,
+        byte: u8,
+    ) -> Result<(), Error<E, PinError>> {
         spi.transfer(&mut [byte])?;
         Ok(())
     }
